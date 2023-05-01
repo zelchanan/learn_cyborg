@@ -127,6 +127,7 @@ class EnvironmentController:
             self.action[agent_name] = agent_action
 
             # perform action on state
+            #print(f"{agent_name}: {str(self.action[agent_name])}")
             next_observation[agent_name] = self._filter_obs(self.execute_action(self.action[agent_name]), agent_name)
 
         # get true observation
@@ -145,6 +146,7 @@ class EnvironmentController:
             reward = agent_object.determine_reward(next_observation, true_observation,
                                                    self.action, self.done)
             self.reward[agent_name] = reward + self.action[agent_name].cost
+            #print(f"agent: {agent_name}")
             if agent_name != agent:
                 # train agent using obs, reward, previous observation, and done
                 agent_object.train(Results(observation=self.observation[agent_name].data, reward=reward,

@@ -1,30 +1,18 @@
-import yaml
-import gym
-import logging
 import sys
 
 sys.path.append('.')
 from pathlib import Path
 
 import numpy as np
-from enum import Enum
-# import imageio
-import os
-import matplotlib.pyplot as plt
-import time
-import pandas as pd
 from stable_baselines3 import PPO
-from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback, EvalCallback
-import datetime
 
-from CybORG.Agents.Wrappers.ChallengeWrapper import ChallengeWrapper
+from CybORG.Agents.Wrappers import *
 from CybORG import CybORG
-
 from CybORG.Agents import B_lineAgent, GreenAgent, BlueMonitorAgent
 
-# from hstoy_env.envs.envs_dir.hstoy_env import *
 
+CHECKPOINTS_MODELS = Path("checkpoints")
 SAVE_FREQ = 10000000
 TIMESTEPS = 300000000
 STEP_SIZE = 3
@@ -37,25 +25,23 @@ SCENARIO_PATH = "CybORG/Shared/Scenarios/Scenario1b.yaml"
 lr = 0.0005
 
 
-# class EnvNum():
-#     def __init__(self):
-#         self.n = -1
-#
-#     def get(self):
-#         self.n += 1
-#         return self.n
-#
-# def get_model_name():
-#     return 'randommap_{}steps_lr{}_stepsize{}_3enemies_rot'.format(TIMESTEPS, lr, STEP_SIZE)
 
-def get_env(path: str) -> ChallengeWrapper:
+def get_env(path: str) -> MyChallengeWrapper:
     agents = {
         'Red': B_lineAgent,
         'Green': GreenAgent
     }
 
     env = CybORG(path, 'sim', agents=agents)
-    env = ChallengeWrapper(env=env, agent_name='Blue')
+    eer = EnumActionWrapper(env)
+    wrappers = FixedFlatWrapper(eer)
+    #env = OpenAIGymWrapper(env=wrappers, agent_name='Blue')
+    env = MyChallengeWrapper(env=wrappers,agent_name="Blue")
+
+    # env = table_wrapper(env, output_mode='vector')
+    # env = EnumActionWrapper(env)
+    # env = OpenAIGymWrapper(agent_name=agent_name, env=env)
+    #env = ChallengeWrapper(env=env, agent_name='Blue')
     return env
 
 
@@ -87,106 +73,30 @@ def rl_train(env):
     model.save(Path("trained_models") / "first_model.zip")
 
 
-# def rl_test(n_of_maps_to_test, save_video = False, checkpoint_model = None, avoid_collisions = False):
-#     if checkpoint_model is None:
-#         model_path_and_name = os.path.join(MODELS_PATH, get_model_name()+'.zip')
-#     else:
-#         model_path_and_name = os.path.join(CHECKPOINTS_PATH, "rl_model_{}_steps".format(checkpoint_model))
-#     print("\ntesting model {}".format(model_path_and_name))
-#     model = PPO.load(model_path_and_name, custom_objects={'seed': np.random.randint(2 ** 20)})
-#     env = HSToyEnv()  # gym.make(HSToyEnv)
-#     all_steps =0
-#     acc_coverage = 0
-#     acc_distances = 0
-#     acc_on_building = 0
-#     n_success =0
-#     acc_enemy_killed=0
-#     acc_killed_by_enemy=0
-#     for i in range(n_of_maps_to_test):
-#
-#         obs = env.reset()
-#         info_exists = False
-#         images = []
-#         n_steps = 0
-#         if save_video:
-#             img = env.render(mode='rgb',reward= 0)
-#             for _ in range(25):
-#                 images.append(img)
-#         while True:
-#             # unfortunately reset does not expose info. Hence immediately after reset we cannot check the action
-#             if avoid_collisions and info_exists:
-#                 # if action hits a building or takes out of boundaries choose the next best action
-#                 probs = []
-#                 ob = model.policy.obs_to_tensor(obs)[0]
-#                 dist = model.policy.get_distribution(ob)
-#                 for d in dist.distribution:
-#                     probs.append(d.probs.detach().cpu().numpy()[0])
-#                 P = 1
-#                 for p in probs:
-#                     P = np.multiply.outer(P,p)
-#                 ordered_actions = np.array(np.unravel_index(np.argsort(P, axis=None)[::-1], P.shape)).T
-#                 for action in ordered_actions:
-#                     if not forbidden_action(action, info):
-#                         break
-#             else:
-#                 action, _ = model.predict(obs, deterministic=True)
-#             obs, reward, dones, info = env.step(action)
-#             info_exists = True
-#             if save_video:
-#                 img = env.render(mode='rgb', reward=reward)
-#                 images.append(img)
-#
-#             n_steps += 1
-#             if dones:
-#
-#                 all_steps += n_steps
-#                 acc_coverage += info["coverage"]
-#                 acc_distances += info["distance"]
-#                 acc_on_building += info["on_building"]
-#                 acc_enemy_killed += info["enemy_killed"]
-#                 acc_killed_by_enemy += info["killed_by_enemy"]
-#                 if info["finished"]:
-#                     n_success += 1
-#                 if save_video:
-#                     for _ in range(25):
-#                         images.append(img)
-#                     filename = os.path.join(VIDEO_PATH, get_model_name() + '_test%d.mp4' % (i))
-#                     print("video path:", filename)
-#                     imageio.mimsave(filename, images)
-#                 break
-#     str_res = "model {}. success in {:3d} out of {:3d} tests. success rate {:5.2f}%. Averaged coverage {:5.2f}%. " \
-#               "Averaged number of steps (including failures) {:6.2f}. Average distance {:6.1f}. Steps on building {:5.2f} " \
-#               "Killed {} enemies. Killed by {} enemies.\n"\
-#         .format(checkpoint_model if checkpoint_model else get_model_name(), n_success, n_of_maps_to_test,
-#                 100*n_success / n_of_maps_to_test, acc_coverage / n_of_maps_to_test, all_steps / n_of_maps_to_test,
-#                 acc_distances / n_of_maps_to_test, acc_on_building / n_of_maps_to_test,
-#                 acc_enemy_killed / n_of_maps_to_test, acc_killed_by_enemy / n_of_maps_to_test)
-#     print(str_res)
-#     return str_res
-#
-# def forbidden_action(a, info):
-#     head_angle = (info["head"] + a[1] - HEAD_MAX_STEP_ANGLE) % N_POSSIBLE_HEAD_ANGLES
-#     if head_angle == 0: dy, dx = -a[0], 0
-#     if head_angle == 1: dy, dx = -a[0], a[0]
-#     if head_angle == 2: dy, dx = 0, a[0]
-#     if head_angle == 3: dy, dx = a[0], a[0]
-#     if head_angle == 4: dy, dx = a[0], 0
-#     if head_angle == 5: dy, dx = a[0], -a[0]
-#     if head_angle == 6: dy, dx = 0, -a[0]
-#     if head_angle == 7: dy, dx = -a[0], -a[0]
-#     y,x = info["position"]
-#     y += dy
-#     x += dx
-#     if y < 0 or x < 0 or y >= HEIGHT or x >= WIDTH:
-#         return True
-#     if (info["map"][y,x] == COLORS_DICT["BUILDING"]) or (info["map"][y,x] == COLORS_DICT["WINDOW"]):
-#         return True
-#     return False
+def run_episode(fname):
+    fm = PPO.load(CHECKPOINTS_MODELS / "rl_model_30000_steps.zip")
+    env = get_env(SCENARIO_PATH)
+    done = True
+    reward = 0
+    for i in range(100):
+        if done:
+            np.random.seed(0)
+            obs = env.reset()
+            print("################## NEW EPISODE #########################")
+        print(f"---------------- {env.step_counter} ------------------")
+        action = fm.predict(obs)[0]
+        s = str(env.env.env.reverse_possible_actions.iloc[action])
+        obs, reward, done, info = env.step(action)
+        for c in ["Blue","Green","Red"]:
+            print(c,env.env.env.env.environment_controller.action[c])
+        print(env.env.env.env.environment_controller.reward)
+        print(f"reward: {reward}")
 
 
 if __name__ == '__main__':
     env = get_env(SCENARIO_PATH)
     rl_train(env)
+    #run_episode(SCENARIO_PATH)
 
     # rl_train()
     # filename ="{}_{}.txt".format(datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"), get_model_name())
