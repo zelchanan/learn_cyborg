@@ -4,13 +4,18 @@ sys.path.append('.')
 from pathlib import Path
 
 import numpy as np
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, DQN
 from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback, EvalCallback
 
-from CybORG.Agents.Wrappers import *
+from CybORG.Agents.Wrappers.EnumActionWrapper import EnumActionWrapper
+from CybORG.Agents.Wrappers.FixedFlatWrapper import FixedFlatWrapper
+# import CybORG.Agents.Wrappers.ChallengeWrapper as cw
+from CybORG.Agents.Wrappers.myChallengeWrapper import MyChallengeWrapper
+from CybORG.Agents.Wrappers.ChallengeWrapper import ChallengeWrapper
+from CybORG.Agents.Wrappers.OpenAIGymWrapper import OpenAIGymWrapper
+
 from CybORG import CybORG
 from CybORG.Agents import B_lineAgent, GreenAgent, BlueMonitorAgent
-
 
 CHECKPOINTS_MODELS = Path("checkpoints")
 SAVE_FREQ = 10000000
@@ -25,60 +30,69 @@ SCENARIO_PATH = "CybORG/Shared/Scenarios/Scenario1b.yaml"
 lr = 0.0005
 
 
-
-def get_env(path: str) -> MyChallengeWrapper:
+def get_cw(path: str):
     agents = {
         'Red': B_lineAgent,
         'Green': GreenAgent
+    }
+    cyborg = CybORG(path, 'sim', agents=agents)
+
+    return ChallengeWrapper(env=cyborg, agent_name='Blue', max_steps=30)
+
+
+def get_mcw(path: str) -> MyChallengeWrapper:
+    agents = {
+        'Red': B_lineAgent
+        # 'Green': GreenAgent
     }
 
     env = CybORG(path, 'sim', agents=agents)
     eer = EnumActionWrapper(env)
     wrappers = FixedFlatWrapper(eer)
-    #env = OpenAIGymWrapper(env=wrappers, agent_name='Blue')
-    env = MyChallengeWrapper(env=wrappers,agent_name="Blue")
+    # env = OpenAIGymWrapper(env=wrappers, agent_name='Blue')
+    env = MyChallengeWrapper(env=wrappers, agent_name="Blue", max_counter=30)
 
     # env = table_wrapper(env, output_mode='vector')
     # env = EnumActionWrapper(env)
     # env = OpenAIGymWrapper(agent_name=agent_name, env=env)
-    #env = ChallengeWrapper(env=env, agent_name='Blue')
+    # env = ChallengeWrapper(env=env, agent_name='Blue')
     return env
 
 
-def rl_train(env):
-    model = PPO("MlpPolicy", env, gamma=0.95,
-                learning_rate=lr,
-                n_steps=128,
-                batch_size=2048,
-                n_epochs=4,
-                ent_coef=0.025,
-                vf_coef=0.005,
-                clip_range=0.2,
-                clip_range_vf=None,
-                gae_lambda=0.9,
-                verbose=1,
-                tensorboard_log="PPO_log",
-                seed=123)
-    # model_path_and_name = os.path.join(MODELS_PATH, get_model_name()+'.zip')
-    # model_path_and_name = os.path.join(MODELS_PATH, "randommap_100000000steps_lr0.0005_stepsize3_withenemy")
-    # model = PPO.load(model_path_and_name, env=env,  custom_objects={'seed': np.random.randint(2 ** 20)})
-    checkpoint_callback = CheckpointCallback(save_freq=10000, save_path=CHECKPOINTS_PATH,
-                                             name_prefix='rl_model')
-    # eval_callback = EvalCallback(eval_env=get_env(SCENARIO_PATH), best_model_save_path="./logs/",
-    #                              log_path="./logs/", eval_freq=500,
-    #                              deterministic=True, render=False)
-    # checkpoint_callback = CustomCallback()
-    # print("start training. model path and name: {}".format(model_path_and_name))
-    model.learn(total_timesteps=100000, log_interval=20, callback=checkpoint_callback)
-    model.save(Path("trained_models") / "first_model.zip")
+def get_model(rl_str: str, env: OpenAIGymWrapper):
+    lr = 5e-4
+    if rl_str == "PPO":
+        return PPO("MlpPolicy", env, gamma=0.95,
+                   learning_rate=lr,
+                   n_steps=128,
+                   batch_size=2048,
+                   n_epochs=4,
+                   ent_coef=0.025,
+                   vf_coef=0.005,
+                   clip_range=0.2,
+                   clip_range_vf=None,
+                   gae_lambda=0.9,
+                   verbose=1,
+                   tensorboard_log="PPO_log",
+                   device="cuda",
+                   seed=123)
+    if rl_str == "DQN":
+        return DQN("MlpPolicy", env, gamma=0.95,
+                   learning_rate=lr, verbose=1, tensorboard_log="DQN_log", device="cuda",
+
+                   )
+
+    # checkpoint_callback = CheckpointCallback(save_freq=10000, save_path=CHECKPOINTS_PATH,
+    #                                          name_prefix='rl_model')
 
 
-def run_episode(fname):
-    fm = PPO.load(CHECKPOINTS_MODELS / "rl_model_30000_steps.zip")
-    env = get_env(SCENARIO_PATH)
+def run_episode(env: OpenAIGymWrapper):
+    # fm = PPO.load(CHECKPOINTS_MODELS / "rl_model_30000_steps.zip")
+    fm = PPO.load("trained_models/PPO_model.zip")
+    # env = func(SCENARIO_PATH)
     done = True
-    reward = 0
-    for i in range(100):
+    total_reward = 0
+    for i in range(60):
         if done:
             np.random.seed(0)
             obs = env.reset()
@@ -87,16 +101,29 @@ def run_episode(fname):
         action = fm.predict(obs)[0]
         s = str(env.env.env.reverse_possible_actions.iloc[action])
         obs, reward, done, info = env.step(action)
-        for c in ["Blue","Green","Red"]:
-            print(c,env.env.env.env.environment_controller.action[c])
-        print(env.env.env.env.environment_controller.reward)
-        print(f"reward: {reward}")
+        total_reward += reward
+        for c in ["Blue", "Green", "Red"]:
+            # print(c, env.env.env.env.environment_controller.action[c])
+            print(c, env.env.env.env.env.env.environment_controller.action[c])
+        # print(env.env.env.env.environment_controller.reward)
+        print(f"total: {total_reward:3.1f}, rewards: {env.env.env.env.env.env.environment_controller.reward}")
+        #print(f"reward: {reward}")
 
 
 if __name__ == '__main__':
-    env = get_env(SCENARIO_PATH)
-    rl_train(env)
-    #run_episode(SCENARIO_PATH)
+    func = get_cw
+    func = get_cw
+    #np.set_printoptions(1)
+    env = func(SCENARIO_PATH)
+    rl_str = "PPO"
+    # env = get_env(SCENARIO_PATH)
+    # env = get_cw(SCENARIO_PATH)
+    model = get_model(rl_str, env)
+    #model.learn(total_timesteps=1000000)
+    #model.save(f"trained_models/{rl_str}_{model.policy.features_dim}_model.zip")
+    run_episode(env)
+
+    # run_episode(func)
 
     # rl_train()
     # filename ="{}_{}.txt".format(datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S"), get_model_name())

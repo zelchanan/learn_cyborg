@@ -5,7 +5,7 @@ from typing import Union
 import pandas as pd
 
 from CybORG.Agents.SimpleAgents import BaseAgent
-from CybORG.Agents.Wrappers import BaseWrapper
+from CybORG.Agents.Wrappers.BaseWrapper import BaseWrapper
 from CybORG.Shared import Results
 
 

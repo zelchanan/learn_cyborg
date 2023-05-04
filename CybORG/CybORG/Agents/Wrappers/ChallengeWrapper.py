@@ -1,30 +1,6 @@
-import numpy as np
 from gym import Env
 
 from CybORG.Agents.Wrappers import BaseWrapper, OpenAIGymWrapper, BlueTableWrapper, RedTableWrapper, EnumActionWrapper
-
-
-class MyChallengeWrapper(OpenAIGymWrapper):
-    def __init__(self, agent_name: str, env: BaseWrapper = None, max_counter: int = 60):
-        super().__init__(agent_name=agent_name, env=env)
-        self.step_counter: int = 0
-        self.max_counter = max_counter
-        self.previous_reward: int = 0
-
-    def step(self, action=None):
-        self.step_counter += 1
-        obs, reward, done, info = super().step(action=action)
-
-        done = done | self.step_counter >= 60
-        new_reward = reward - self.previous_reward
-        self.previous_reward = reward
-        return obs, reward, done, info
-
-    def reset(self, agent=None):
-        np.random.seed(0)
-        self.previous_reward = 0
-        self.step_counter = 0
-        return super().reset()
 
 
 class ChallengeWrapper(Env, BaseWrapper):

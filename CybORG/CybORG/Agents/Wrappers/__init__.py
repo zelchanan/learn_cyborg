@@ -5,5 +5,5 @@ from .BlueTableWrapper import BlueTableWrapper
 from .RedTableWrapper import RedTableWrapper
 from .TrueTableWrapper import TrueTableWrapper
 from .EnumActionWrapper import EnumActionWrapper
-from .ChallengeWrapper import ChallengeWrapper, MyChallengeWrapper
+from .ChallengeWrapper import ChallengeWrapper
 from .ReduceActionSpaceWrapper import ReduceActionSpaceWrapper
